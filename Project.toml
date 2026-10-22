@@ -1,0 +1,31 @@
+name = "PrintSim"
+uuid = "f01d4bda-9367-4b24-b59d-fdacb335a46e"
+version = "0.1.0"
+authors = ["Simon Danisch <sdanisch@gmail.com>"]
+
+[deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
+Hikari = "afc56b53-c9a9-482a-a956-d1d800e05558"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+Mantle = "8f4c1f2e-6a3d-4b71-9c05-2e7d8a1b6f34"
+Packing = "19eb6ba3-879d-56ad-ad62-d5c202156566"
+RayMakie = "70852e3a-d594-4041-8350-783a02753e02"
+Raycore = "afc56b53-c9a9-482a-a956-d1d800e05559"
+ZipArchives = "49080126-0e18-4c2a-b176-c102e4b3760c"
+
+[compat]
+Adapt = "4.7.4"
+GeometryBasics = "0.5.13"
+Gmsh = "0.3.1"
+Hikari = "0.1.0"
+LibGEOS = "0.9.7"
+LinearAlgebra = "1.12.0"
+Packing = "0.5.1"
+ZipArchives = "2.6.1"
+julia = "1.12"
