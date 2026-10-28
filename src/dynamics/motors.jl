@@ -229,7 +229,7 @@ function motor_step_bound!(bound, q, base, output, motors)
         # Resolve the magnetic wells even when inertia alone would cross several of them.
         limit = Float32(π) / Float32(motors.steps[i])
         cap = min(1.0f0, limit / max(abs(delta), 1.0f-30))
-        Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+        Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
     end
     return nothing
 end

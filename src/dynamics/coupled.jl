@@ -318,7 +318,7 @@ function sheet_step_bound!(bound, x, base, anchor, q, qbase, qanchor, model, cou
             Pt = I3 - normal * normal'
             stretch = T.lagged[slot, i] > 0 && max(C.grip[1, mesh], C.grip[2, mesh]) > 0 ? Pt * (T.spring[slot, i] + slip) : zero(Vec3f)
             cap = contact_step_bound(gap, normal, stretch, delta, σ)
-            Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+            Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
         end
     end
     return nothing
@@ -349,7 +349,7 @@ function face_step_bound!(bound, x, base, anchor, q, qbase, qanchor, model, coup
                 mesh = feature_mesh(C, kind, F.feature[slot, t])
                 stretch = F.lagged[slot, t] > 0 && max(C.grip[1, mesh], C.grip[2, mesh]) > 0 ? Pt * (F.spring[slot, t] + slip) : zero(Vec3f)
                 cap = contact_step_bound(gap, normal, stretch, delta, σ)
-                Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+                Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
             end
         end
     end
@@ -393,7 +393,7 @@ function body_step_bound!(bound, q, base, anchor, model, T, C, one, σ::Float32)
             friction = min(C.grip[1, own], C.grip[1, mesh]) > 0 || min(C.grip[2, own], C.grip[2, mesh]) > 0
             stretch = friction && T.lagged[slot, i] > 0 ? Pt * (T.spring[slot, i] + slip) : zero(Vec3f)
             cap = contact_step_bound(gap, normal, stretch, delta, σ)
-            Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+            Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
         end
     end
     return nothing

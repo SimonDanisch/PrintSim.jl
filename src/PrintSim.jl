@@ -37,6 +37,10 @@ import KernelInterface as KI
 using StaticArrays: MVector
 import Atomix
 
+# Device atomics below claim independent slots or combine reductions. Their
+# payloads are consumed after the dispatch, rather than published to other
+# lanes by the counter, so they use explicit monotonic ordering.
+
 export Item, Part, printed, parts, with_gmsh, occ, prism, box3, cylinder_x, cut!, fuse!
 export Bed, PrintObject, export_3mf
 export PrintedPart, read_beads, printed_parts, reprint, section

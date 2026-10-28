@@ -197,9 +197,9 @@ function fem_coarse_restrict_tiled!(coarse, r, tiles::Int32, partial=nothing)
         value = sh[1] + sh[2]
         if partial === nothing
             at = coarse.rhs[part] + Int32(3) * (localmode - Int32(1))
-            Atomix.@atomic coarse.scratch[at] += value[1]
-            Atomix.@atomic coarse.scratch[at + Int32(1)] += value[2]
-            Atomix.@atomic coarse.scratch[at + Int32(2)] += value[3]
+            Atomix.@atomic :monotonic coarse.scratch[at] += value[1]
+            Atomix.@atomic :monotonic coarse.scratch[at + Int32(1)] += value[2]
+            Atomix.@atomic :monotonic coarse.scratch[at + Int32(2)] += value[3]
         else
             partial[group + Int32(1)] = value
         end

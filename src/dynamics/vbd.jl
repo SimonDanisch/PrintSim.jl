@@ -163,7 +163,7 @@ function dot_into!(scalars, a, b, n::Int32, slot::Int32, ::Val{MODE}=Val(0)) whe
         elseif MODE==2
             scalars[slot]+=sh[1]+sh[2]
         else
-            Atomix.@atomic scalars[slot]+=sh[1]+sh[2]
+            Atomix.@atomic :monotonic scalars[slot]+=sh[1]+sh[2]
         end
     end
     return nothing

@@ -307,7 +307,7 @@ function fem_step_bound!(bound, fd, bd, sd, fs, bs, ss, model, affine, index, C,
         stretch -= dot(stretch, normal) * normal
         friction || (stretch = zero(Vec3f))
         cap = contact_step_bound(gap, normal, stretch, delta, σ)
-        Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+        Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
     end
     return nothing
 end

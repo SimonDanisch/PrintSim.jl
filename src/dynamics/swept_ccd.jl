@@ -207,10 +207,10 @@ end
         # Stay strictly before the conservative impact bound. An unresolved
         # query is reported separately, even if it supplies a usable bound.
         value = reinterpret(UInt32, 0.9f0 * result.time)
-        Atomix.@atomic min(ccd.bound[1], value)
+        Atomix.@atomic :monotonic min(ccd.bound[1], value)
         result.resolved || (flags |= UInt32(1))
         result.time > 0 || (flags |= UInt32(2))
-        flags==0 || (Atomix.@atomic ccd.status[1] |= flags)
+        flags==0 || (Atomix.@atomic :monotonic ccd.status[1] |= flags)
     end
     return flags
 end
@@ -265,8 +265,8 @@ end
     result=initial_edge_face_result(scene,ccd.refinement)
     result.hit || return UInt32(0)
     flags=result.resolved ? UInt32(2) : UInt32(3)
-    Atomix.@atomic min(ccd.bound[1],UInt32(0))
-    Atomix.@atomic ccd.status[1]|=flags
+    Atomix.@atomic :monotonic min(ccd.bound[1],UInt32(0))
+    Atomix.@atomic :monotonic ccd.status[1]|=flags
     return flags
 end
 
@@ -431,14 +431,14 @@ function swept_pair_candidates!(work,ccd,first::Int32,queries::Int32,::Val{STORE
                         if found<=work.count[lane] && index<=length(work.pairs)
                             work.pairs[index]=(query,other)
                         else
-                            Atomix.@atomic work.invalid[1]+=Int32(1)
+                            Atomix.@atomic :monotonic work.invalid[1]+=Int32(1)
                         end
                     end
                 end
             end
         end
         if STORE
-            found==work.count[lane] || (Atomix.@atomic work.invalid[1]+=Int32(1))
+            found==work.count[lane] || (Atomix.@atomic :monotonic work.invalid[1]+=Int32(1))
         else
             work.count[lane]=found
         end

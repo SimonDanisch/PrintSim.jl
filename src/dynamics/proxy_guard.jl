@@ -163,7 +163,7 @@ function proxy_reduce_error!(guard,offset::Int32,count::Int32)
     end
     KI.barrier()
     @inbounds if lane==1
-        Atomix.@atomic max(guard.maximum[1],shared[1])
+        Atomix.@atomic :monotonic max(guard.maximum[1],shared[1])
     end
     return nothing
 end

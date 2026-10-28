@@ -47,8 +47,8 @@ function ccd_queue_prepare!(valid,chunks,total,overflow,prefix_total,invalid,ccd
             # Bit 4 retains the capacity cause across subsequent CCD phases;
             # bit 2 remains the shared sticky "cannot advance" condition.
             failure=n>capacity ? UInt32(6) : UInt32(2)
-            Atomix.@atomic ccd.status[1]|=failure
-            Atomix.@atomic min(ccd.bound[1],UInt32(0))
+            Atomix.@atomic :monotonic ccd.status[1]|=failure
+            Atomix.@atomic :monotonic min(ccd.bound[1],UInt32(0))
         end
     end
     return nothing

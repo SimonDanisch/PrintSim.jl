@@ -374,7 +374,7 @@ the row sum (`y` held) or counted as lost.
         if o != 0 && ay != 0 && find_slot(nb, ay, x) != 0
             C[o, x] += K
         else
-            Atomix.@atomic lost[1] += Int32(1)
+            Atomix.@atomic :monotonic lost[1] += Int32(1)
         end
     end
 end

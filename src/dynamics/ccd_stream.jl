@@ -56,8 +56,8 @@ function ccd_stream_prepare!(valid,chunks,total,overflow,prefix_total,invalid,cc
         chunks[1]=safe ? Int32(cld(n,Int64(pair_batch))) : Int32(0)
         retry=n>capacity && invalid[1]==0 && count[1]>1
         if !safe && !retry
-            Atomix.@atomic ccd.status[1]|=(n>capacity ? UInt32(6) : UInt32(2))
-            Atomix.@atomic min(ccd.bound[1],UInt32(0))
+            Atomix.@atomic :monotonic ccd.status[1]|=(n>capacity ? UInt32(6) : UInt32(2))
+            Atomix.@atomic :monotonic min(ccd.bound[1],UInt32(0))
         end
     end
     return nothing
@@ -106,8 +106,8 @@ function ccd_stream_finished!(running,ccd)
     KI.get_global_id(Int32).x==1 || return nothing
     @inbounds if running[1]!=0
         # Bit 8 distinguishes an exhausted stream schedule from capacity bit 4.
-        Atomix.@atomic ccd.status[1]|=UInt32(10)
-        Atomix.@atomic min(ccd.bound[1],UInt32(0))
+        Atomix.@atomic :monotonic ccd.status[1]|=UInt32(10)
+        Atomix.@atomic :monotonic min(ccd.bound[1],UInt32(0))
     end
     return nothing
 end

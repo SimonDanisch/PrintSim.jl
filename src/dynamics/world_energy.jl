@@ -394,7 +394,7 @@ function stack_step_bound!(bound, x, base, anchor, P, one, r::Float32, σ::Float
             cap = contact_step_bound(gap, normal, stretch, delta, σ)
             closing < 0 && (cap = min(cap, clamp(0.9f0 * (gap + r) / -closing, 0.0f0, 1.0f0)))
         end
-        Atomix.@atomic min(bound[1], reinterpret(UInt32, cap))
+        Atomix.@atomic :monotonic min(bound[1], reinterpret(UInt32, cap))
     end
     return nothing
 end

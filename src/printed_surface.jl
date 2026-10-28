@@ -407,7 +407,7 @@ function countbins!(cnt, E, W, L, ns, lox, loy, cell, nx, ny, nl, nb, nbx, nby, 
     for by in by0:by1, bx in bx0:bx1
         centre = Vec2f(lox + (Float32(bx) + 0.5f0) * side, loy + (Float32(by) + 0.5f0) * side)
         first(segmentpoint(centre, a, b)) <= r || continue
-        @inbounds Atomix.@atomic cnt[bx + nbx * (by + nby * (layer - Int32(1))) + Int32(1)] += Int32(1)
+        @inbounds Atomix.@atomic :monotonic cnt[bx + nbx * (by + nby * (layer - Int32(1))) + Int32(1)] += Int32(1)
     end
     return nothing
 end
@@ -421,7 +421,7 @@ function fillbins!(lists, off, cursor, E, W, L, ns, lox, loy, cell, nx, ny, nl, 
         centre = Vec2f(lox + (Float32(bx) + 0.5f0) * side, loy + (Float32(by) + 0.5f0) * side)
         first(segmentpoint(centre, a, b)) <= r || continue
         k = bx + nbx * (by + nby * (layer - Int32(1))) + Int32(1)
-        slot = @inbounds Atomix.@atomic cursor[k] += Int32(1)
+        slot = @inbounds Atomix.@atomic :monotonic cursor[k] += Int32(1)
         @inbounds lists[(k == Int32(1) ? Int32(0) : off[k - Int32(1)]) + slot] = s
     end
     return nothing
@@ -498,7 +498,7 @@ end
     ra, rb = @inbounds(label[a]), @inbounds(label[b])
     ra == rb && return nothing
     hi, lo = max(ra, rb), min(ra, rb)
-    old = (@inbounds Atomix.@atomicreplace label[hi] hi => lo).old
+    old = (@inbounds Atomix.@atomicreplace :monotonic label[hi] hi => lo).old
     old == hi && @inbounds(hooked[1] = Int32(1))
     return nothing
 end
@@ -537,7 +537,7 @@ function voidflags!(flags, label, D, S, K, nc, nx, ny, cell, hole)
         kind == BEAD_OUTER && (bits |= VOID_OUTER)
     end
     d > hole && (bits |= VOID_DEEP)
-    bits == 0x00000000 || @inbounds Atomix.@atomic flags[label[idx]] |= bits
+    bits == 0x00000000 || @inbounds Atomix.@atomic :monotonic flags[label[idx]] |= bits
     return nothing
 end
 
@@ -551,7 +551,7 @@ function insidebits!(inside, D, label, flags, nc, offset)
     d = @inbounds D[idx]
     d <= 0f0 || !isholeflags(@inbounds flags[label[idx]]) || return nothing
     c = offset + idx - Int32(1)
-    @inbounds Atomix.@atomic inside[(c >> 5) + Int32(1)] |= UInt32(1) << (c & Int32(31))
+    @inbounds Atomix.@atomic :monotonic inside[(c >> 5) + Int32(1)] |= UInt32(1) << (c & Int32(31))
     return nothing
 end
 

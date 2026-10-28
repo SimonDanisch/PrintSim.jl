@@ -154,7 +154,7 @@ function append_vertex_incidence!(inc)
             duplicate |= inc.keys[previous, entry] == node
         end
         duplicate && continue
-        slot = Atomix.@atomic inc.count[node] += Int32(1)
+        slot = Atomix.@atomic :monotonic inc.count[node] += Int32(1)
         slot <= inc.capacity && (inc.ids[slot, node] = entry)
     end
     return nothing
@@ -235,10 +235,10 @@ function sparse_vertex_incidence!(inc,fill::Bool)
         end
         duplicate && continue
         if fill
-            slot=Atomix.@atomic inc.cursor[node]+=Int32(1)
+            slot=Atomix.@atomic :monotonic inc.cursor[node]+=Int32(1)
             slot<=inc.capacity && (inc.ids[slot,node]=entry)
         else
-            Atomix.@atomic inc.count[node]+=Int32(1)
+            Atomix.@atomic :monotonic inc.count[node]+=Int32(1)
         end
     end
     return nothing

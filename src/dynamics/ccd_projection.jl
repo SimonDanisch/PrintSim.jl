@@ -200,7 +200,7 @@ end
 @inline record_ccd_primitive_bound!(::Nothing,bits)=nothing
 @inline function record_ccd_primitive_bound!(witness::Tuple,bits)
     times,index=witness
-    @inbounds Atomix.@atomic min(times[index],bits)
+    @inbounds Atomix.@atomic :monotonic min(times[index],bits)
     return nothing
 end
 
@@ -219,11 +219,11 @@ end
     flags=UInt32(0)
     if result.hit
         bits=reinterpret(UInt32,.9f0*result.time)
-        Atomix.@atomic min(ccd.bound[1],bits)
+        Atomix.@atomic :monotonic min(ccd.bound[1],bits)
         record_ccd_primitive_bound!(witness,bits)
         result.resolved || (flags|=UInt32(1))
         result.time>0 || (flags|=UInt32(2))
-        flags==0 || (Atomix.@atomic ccd.status[1]|=flags)
+        flags==0 || (Atomix.@atomic :monotonic ccd.status[1]|=flags)
     end
     return flags
 end

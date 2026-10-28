@@ -14,7 +14,7 @@ function newton_motion_bound!(bound,maximum_step,limit::Float32)
     @inbounds begin
         step=reinterpret(Float32,maximum_step[1])
         cap=newton_motion_fraction(step,limit)
-        Atomix.@atomic min(bound[1],reinterpret(UInt32,cap))
+        Atomix.@atomic :monotonic min(bound[1],reinterpret(UInt32,cap))
     end
     return nothing
 end
@@ -26,7 +26,7 @@ function newton_step_max!(maximum_step,x,base)
         delta=x[i]-base[i]
         value = maximum(abs,delta)
         all(isfinite,delta) && isfinite(value) || (value = Inf32)
-        Atomix.@atomic max(maximum_step[1],reinterpret(UInt32,value))
+        Atomix.@atomic :monotonic max(maximum_step[1],reinterpret(UInt32,value))
     end
     return nothing
 end
@@ -41,7 +41,7 @@ function affine_newton_step_max!(maximum_step,q,base,model,C,one)
         step = affine_point(q,body,u,one[1])-affine_point(base,body,u,one[1])
         value = maximum(abs,step)
         all(isfinite,step) && isfinite(value) || (value = Inf32)
-        Atomix.@atomic max(maximum_step[1],reinterpret(UInt32,value))
+        Atomix.@atomic :monotonic max(maximum_step[1],reinterpret(UInt32,value))
     end
     return nothing
 end

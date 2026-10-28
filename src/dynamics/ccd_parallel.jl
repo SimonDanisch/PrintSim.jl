@@ -38,7 +38,7 @@ function ccd_vf_parallel_checks!(work,ccd,total,iteration,pair_batch::Int32)
         radius=ccd.radius[ccd.owner[triangle]]+ccd.radius[ccd.owner[other]]
         witness=hasproperty(work,:pair_bound) ? (work.pair_bound,index) : nothing
         flags=filtered_swept_accumulate!(ccd,(point,face...),Val(true),radius,true,witness)
-        flags==0 || (Atomix.@atomic work.flags[index]|=flags)
+        flags==0 || (Atomix.@atomic :monotonic work.flags[index]|=flags)
     end
     return nothing
 end
@@ -62,7 +62,7 @@ function ccd_ee_parallel_checks!(work,ccd,total,iteration,pair_batch::Int32)
         radius=ccd.radius[ccd.owner[triangle]]+ccd.radius[ccd.owner[other]]
         witness=hasproperty(work,:pair_bound) ? (work.pair_bound,index) : nothing
         flags=filtered_swept_accumulate!(ccd,(aa,ab,ba,bb),Val(false),radius,true,witness)
-        flags==0 || (Atomix.@atomic work.flags[index]|=flags)
+        flags==0 || (Atomix.@atomic :monotonic work.flags[index]|=flags)
     end
     return nothing
 end
