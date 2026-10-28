@@ -121,8 +121,9 @@ end
 Every hit of each line with the part in `accel`, moved by the pose (`R`, `t`), in order along
 the line: `ts[k, i]` for line `i`, `counts[i]` of them (`K` means it may have more).
 """
-@kernel function trace_lines!(ts, counts, accel, lines::Lines, R::Mat3f, t::Vec3f, K::Int32)
-    i = @index(Global, Linear)
+function trace_lines!(ts, counts, accel, lines::Lines, R::Mat3f, t::Vec3f, K::Int32)
+    i = KI.get_global_id(Int32).x
+    i <= length(lines) || return nothing
     @inbounds begin
         Rt = transpose(R)
         start = crossing(lines, i) - lines.s0 * lines.dir
@@ -141,6 +142,7 @@ the line: `ts[k, i]` for line `i`, `counts[i]` of them (`K` means it may have mo
         end
         counts[i] = n
     end
+    return nothing
 end
 
 """
@@ -149,8 +151,9 @@ part's hits alternate between entering and leaving it. `odd[i]` marks a line whe
 hits do not pair up (it met an edge or grazed a face where the floats run out); it counts as
 running in neither.
 """
-@kernel function overlap_lines!(len, odd, @Const(ta), @Const(ca), @Const(tb), @Const(cb))
-    i = @index(Global, Linear)
+function overlap_lines!(len, odd, ta, ca, tb, cb, n::Int32)
+    i = KI.get_global_id(Int32).x
+    i <= n || return nothing
     @inbounds begin
         na, nb = ca[i], cb[i]
         ia, ib = Int32(1), Int32(1)
@@ -174,6 +177,7 @@ running in neither.
         len[i] = bad ? 0.0f0 : acc
         odd[i] = bad
     end
+    return nothing
 end
 
 """
@@ -190,7 +194,7 @@ mutable struct Scratch{T, C, L, O}
 end
 
 function Scratch(backend, hits, n)
-    z(T, dims...) = KA.zeros(backend, T, dims...)
+    z(T, dims...) = KI.zeros(backend, T, dims...)
     return Scratch(z(Float32, hits, n), z(Int32, n), z(Float32, hits, n), z(Int32, n), z(Float32, n), z(Bool, n))
 end
 
@@ -222,7 +226,7 @@ end
 
 "Traces `lines` through part `p` at `pose` into the hit buffers `ts` and `counts`."
 function trace!(ts, counts, r::Rays, p::Traced, pose::Pose, lines::Lines)
-    trace_lines!(r.backend, 256)(ts, counts, Adapt.adapt(r.backend, p.accel), lines, pose.R, pose.t, r.hits; ndrange = length(lines))
+    launch!(r.backend, trace_lines!, (ts, counts, Adapt.adapt(r.backend, p.accel), lines, pose.R, pose.t, r.hits), length(lines))
     return nothing
 end
 
@@ -230,11 +234,11 @@ end
 Sums the first `n` lines' overlaps into `out[1, p]`, counts their unpaired lines into
 `out[2, p]` and keeps their most hits in one part in `out[3, p]`: one workgroup of 256.
 """
-@kernel function reduce_lines!(out, @Const(len), @Const(odd), @Const(ca), @Const(cb), n::Int32, p::Int32)
-    li = @index(Local, Linear)
-    sv = @localmem Float32 (256,)
-    sb = @localmem Float32 (256,)
-    sm = @localmem Float32 (256,)
+function reduce_lines!(out, len, odd, ca, cb, n::Int32, p::Int32)
+    li = KI.get_local_id(Int32).x
+    sv = KI.localmemory(Float32, Val((256,)), Val(1))
+    sb = KI.localmemory(Float32, Val((256,)), Val(2))
+    sm = KI.localmemory(Float32, Val((256,)), Val(3))
     v, bad, most = 0.0f0, 0.0f0, 0.0f0
     i = Int32(li)
     @inbounds while i <= n
@@ -244,27 +248,28 @@ Sums the first `n` lines' overlaps into `out[1, p]`, counts their unpaired lines
         i += Int32(256)
     end
     @inbounds sv[li], sb[li], sm[li] = v, bad, most
-    @synchronize
+    KI.barrier()
     # A tree over the workgroup, one step per halving, written out so no barrier sits in a loop.
     @inbounds li <= 128 && (sv[li] += sv[li + 128]; sb[li] += sb[li + 128]; sm[li] = max(sm[li], sm[li + 128]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 64 && (sv[li] += sv[li + 64]; sb[li] += sb[li + 64]; sm[li] = max(sm[li], sm[li + 64]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 32 && (sv[li] += sv[li + 32]; sb[li] += sb[li + 32]; sm[li] = max(sm[li], sm[li + 32]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 16 && (sv[li] += sv[li + 16]; sb[li] += sb[li + 16]; sm[li] = max(sm[li], sm[li + 16]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 8 && (sv[li] += sv[li + 8]; sb[li] += sb[li + 8]; sm[li] = max(sm[li], sm[li + 8]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 4 && (sv[li] += sv[li + 4]; sb[li] += sb[li + 4]; sm[li] = max(sm[li], sm[li + 4]))
-    @synchronize
+    KI.barrier()
     @inbounds li <= 2 && (sv[li] += sv[li + 2]; sb[li] += sb[li + 2]; sm[li] = max(sm[li], sm[li + 2]))
-    @synchronize
+    KI.barrier()
     @inbounds if li == 1
         out[1, p] = sv[1] + sv[2]
         out[2, p] = sb[1] + sb[2]
         out[3, p] = max(sm[1], sm[2])
     end
+    return nothing
 end
 
 """
@@ -277,7 +282,7 @@ Lines whose hits do not pair up are left out; more than one in a thousand is an 
 whose mesh is not closed).
 """
 function shared(r::Rays, jobs::AbstractVector; lines = r.lines)
-    out = KA.zeros(r.backend, Float32, 3, length(jobs))
+    out = KI.zeros(r.backend, Float32, 3, length(jobs))
     unit = zeros(length(jobs))
     lines_of = zeros(Int, length(jobs))
     for (p, (a, pa, b, pb)) in enumerate(jobs)
@@ -291,8 +296,8 @@ function shared(r::Rays, jobs::AbstractVector; lines = r.lines)
         s = room!(r, n)
         trace!(s.ta, s.ca, r, a, pa, grid)
         trace!(s.tb, s.cb, r, b, pb, grid)
-        overlap_lines!(r.backend, 256)(s.len, s.odd, s.ta, s.ca, s.tb, s.cb; ndrange = n)
-        reduce_lines!(r.backend, 256)(out, s.len, s.odd, s.ca, s.cb, Int32(n), Int32(p); ndrange = 256)
+        launch!(r.backend, overlap_lines!, (s.len, s.odd, s.ta, s.ca, s.tb, s.cb, Int32(n)), n)
+        launch!(r.backend, reduce_lines!, (out, s.len, s.odd, s.ca, s.cb, Int32(n), Int32(p)), 256)
         unit[p] = Float64(h)^2 * Float64(grid.dir[1])
         lines_of[p] = n
     end
@@ -313,8 +318,9 @@ How far each line's stretches of the moving part (`ta`, `ca`) go along it (towar
 they do now: up to a stretch ahead, at once where one is already pressing deeper, `Inf` where
 nothing is ahead. A line whose hits do not pair up gives `Inf` and is marked in `odd`.
 """
-@kernel function advance_lines!(adv, odd, @Const(ta), @Const(ca), @Const(tb), @Const(cb), sense::Int32)
-    i = @index(Global, Linear)
+function advance_lines!(adv, odd, ta, ca, tb, cb, sense::Int32, n::Int32)
+    i = KI.get_global_id(Int32).x
+    i <= n || return nothing
     @inbounds begin
         na, nb = ca[i], cb[i]
         bad = isodd(na) || isodd(nb)
@@ -333,13 +339,14 @@ nothing is ahead. A line whose hits do not pair up gives `Inf` and is marked in 
         adv[i] = best
         odd[i] = bad
     end
+    return nothing
 end
 
 "The smallest of the first `n` advances into `out[1, p]` and their unpaired lines into `out[2, p]`: one workgroup of 256."
-@kernel function reduce_advance!(out, @Const(adv), @Const(odd), n::Int32, p::Int32)
-    li = @index(Local, Linear)
-    sv = @localmem Float32 (256,)
-    sb = @localmem Float32 (256,)
+function reduce_advance!(out, adv, odd, n::Int32, p::Int32)
+    li = KI.get_local_id(Int32).x
+    sv = KI.localmemory(Float32, Val((256,)), Val(1))
+    sb = KI.localmemory(Float32, Val((256,)), Val(2))
     v, bad = Inf32, 0.0f0
     i = Int32(li)
     @inbounds while i <= n
@@ -348,25 +355,26 @@ end
         i += Int32(256)
     end
     @inbounds sv[li], sb[li] = v, bad
-    @synchronize
+    KI.barrier()
     @inbounds li <= 128 && (sv[li] = min(sv[li], sv[li + 128]); sb[li] += sb[li + 128])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 64 && (sv[li] = min(sv[li], sv[li + 64]); sb[li] += sb[li + 64])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 32 && (sv[li] = min(sv[li], sv[li + 32]); sb[li] += sb[li + 32])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 16 && (sv[li] = min(sv[li], sv[li + 16]); sb[li] += sb[li + 16])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 8 && (sv[li] = min(sv[li], sv[li + 8]); sb[li] += sb[li + 8])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 4 && (sv[li] = min(sv[li], sv[li + 4]); sb[li] += sb[li + 4])
-    @synchronize
+    KI.barrier()
     @inbounds li <= 2 && (sv[li] = min(sv[li], sv[li + 2]); sb[li] += sb[li + 2])
-    @synchronize
+    KI.barrier()
     @inbounds if li == 1
         out[1, p] = min(sv[1], sv[2])
         out[2, p] = sb[1] + sb[2]
     end
+    return nothing
 end
 
 """
@@ -378,7 +386,7 @@ start not counted: from about `lines` lines exactly along x through where their 
 across x, the least any of them allows. `Inf` where nothing is ahead.
 """
 function travel(r::Rays, jobs::AbstractVector, sense; lines = r.lines)
-    out = KA.zeros(r.backend, Float32, 2, length(jobs))
+    out = KI.zeros(r.backend, Float32, 2, length(jobs))
     fill!(out, Inf32)
     lines_of = zeros(Int, length(jobs))
     along_x = Vec3f(1, 0, 0)
@@ -393,8 +401,8 @@ function travel(r::Rays, jobs::AbstractVector, sense; lines = r.lines)
         s = room!(r, n)
         trace!(s.ta, s.ca, r, a, pa, grid)
         trace!(s.tb, s.cb, r, b, pb, grid)
-        advance_lines!(r.backend, 256)(s.len, s.odd, s.ta, s.ca, s.tb, s.cb, Int32(sense); ndrange = n)
-        reduce_advance!(r.backend, 256)(out, s.len, s.odd, Int32(n), Int32(p); ndrange = 256)
+        launch!(r.backend, advance_lines!, (s.len, s.odd, s.ta, s.ca, s.tb, s.cb, Int32(sense), Int32(n)), n)
+        launch!(r.backend, reduce_advance!, (out, s.len, s.odd, Int32(n), Int32(p)), 256)
         lines_of[p] = n
     end
     res = Array(out)

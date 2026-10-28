@@ -27,59 +27,46 @@ function word(cmd::AbstractString, letter::Char)
 end
 
 """
-    read_beads(path; filament = 1.75, step = 0.3)
+    scan_beads(lay, path; filament = 1.75, step = 0.3)
 
-Every extrusion of a Bambu Studio G-code file, by the unique label id Bambu Studio writes
-around each object's moves (`100 + k` for the project's k-th object). Arcs (G2/G3) become
-straight pieces at most `step` long. A bead's width follows from the filament it lays, with
-Slic3r's bead of a rectangle with round sides: w = volume / (length · h) + h (1 - π/4).
-Consecutive pieces of about the same width join into one path. Brims, skirts and supports are
-left out: they come off after printing.
+Every extrusion of a Bambu Studio G-code file, handed piece by piece to
+`lay(object, block, feature, a, b, z, h, w)`: the unique label id Bambu Studio writes around
+each object's moves (`100 + k` for the project's k-th object), a counter that grows at every
+new layer, feature and object, the feature's name, the piece from `a` to `b` (plate mm), the
+layer top `z`, layer height `h` and bead width `w`. Arcs (G2/G3) become straight pieces at
+most `step` long. A bead's width follows from the filament it lays, with Slic3r's bead of a
+rectangle with round sides: w = volume / (length · h) + h (1 - π/4). Brims, skirts and
+supports are left out: they come off after printing.
 """
-function read_beads(path; filament = 1.75, step = 0.3)
+function scan_beads(lay, path; filament = 1.75, step = 0.3)
     area = π * filament^2 / 4
-    out = Dict{Int, Vector{BeadPath}}()
     x, y, z, h = 0.0, 0.0, 0.0, 0.2
     relative, e_last = true, 0.0
-    object, outer, removed = 0, false, false
-    current = nothing
-    function finish!()
-        current === nothing && return
-        length(current.points) >= 2 && push!(get!(out, object, BeadPath[]), current)
-        current = nothing
-        return
-    end
-    function lay!(a::Vec2d, b::Vec2d, de)
+    object, feature, removed, block = 0, "", false, 0
+    function piece(a::Vec2d, b::Vec2d, de)
         L = norm(b - a)
         (object == 0 || removed || de <= 0 || L < 1.0e-6) && return
-        w = de * area / (L * h) + h * (1 - π / 4)
-        if current !== nothing && current.points[end] == a && abs(current.w - w) < 0.03 && current.z == z && current.outer == outer
-            push!(current.points, b)
-        else
-            finish!()
-            current = BeadPath([a, b], z, h, w, outer)
-        end
+        lay(object, block, feature, a, b, z, h, de * area / (L * h) + h * (1 - π / 4))
         return
     end
     for line in eachline(path)
         isempty(line) && continue
         if first(line) == ';'
             if startswith(line, "; Z_HEIGHT:")
-                finish!()
+                block += 1
                 z = parse(Float64, strip(line[12:end]))
             elseif startswith(line, "; LAYER_HEIGHT:")
                 h = parse(Float64, strip(line[16:end]))
             elseif startswith(line, "; FEATURE:")
-                finish!()
-                feature = strip(line[11:end])
-                outer = feature == "Outer wall"
+                block += 1
+                feature = String(strip(line[11:end]))
                 removed = feature in ("Brim", "Skirt", "Prime tower") || startswith(feature, "Support")
             elseif startswith(line, "; start printing object, unique label id:") || startswith(line, "; OBJECT_ID:")
                 # A plate with a single object has no start and stop marks, only the object's id per layer.
-                finish!()
+                block += 1
                 object = parse(Int, strip(split(line, ':')[end]))
             elseif startswith(line, "; stop printing object")
-                finish!()
+                block += 1
                 object = 0
             end
             continue
@@ -114,13 +101,43 @@ function read_beads(path; filament = 1.75, step = 0.3)
                 for m in 1:n
                     φ = a0 + sweep * m / n
                     p = m == n ? to : c + r * Vec2d(cos(φ), sin(φ))
-                    lay!(prev, p, de / n)
+                    piece(prev, p, de / n)
                     prev = p
                 end
             else
-                lay!(from, to, de)
+                piece(from, to, de)
             end
             x, y = to
+        end
+    end
+    return nothing
+end
+
+"""
+    read_beads(path; filament = 1.75, step = 0.3)
+
+Every extrusion of a Bambu Studio G-code file ([`scan_beads`](@ref)) as bead paths, by object
+label id. Consecutive pieces of about the same width in one feature join into one path.
+"""
+function read_beads(path; filament = 1.75, step = 0.3)
+    out = Dict{Int, Vector{BeadPath}}()
+    current, owner, last_block = nothing, 0, -1
+    function finish!()
+        current === nothing && return
+        length(current.points) >= 2 && push!(get!(out, owner, BeadPath[]), current)
+        current = nothing
+        return
+    end
+    scan_beads(path; filament, step) do object, block, feature, a, b, z, h, w
+        block == last_block || finish!()
+        last_block = block
+        outer = feature == "Outer wall"
+        if current !== nothing && current.points[end] == a && abs(current.w - w) < 0.03 && current.z == z && current.outer == outer
+            push!(current.points, b)
+        else
+            finish!()
+            current = BeadPath([a, b], z, h, w, outer)
+            owner = object
         end
     end
     finish!()
@@ -156,13 +173,57 @@ function layer_region(paths::Vector{BeadPath})
     all = GEOS.unaryUnion(GEOS.MultiPolygon(pieces))
     walls = [GEOS.LineString([[q[1], q[2]] for q in p.points]) for p in paths if p.outer]
     isempty(walls) && return all
-    wall_lines = GEOS.MultiLineString(walls)
-    filled = GEOS.Polygon[]
-    for poly in polygons(all)
-        holes = [ring for ring in GEOS.interiorRings(poly) if GEOS.distance(ring, wall_lines) < 0.4]
-        push!(filled, GEOS.Polygon(GEOS.exteriorRing(poly), holes))
+    loops = outer_wall_loops(paths)
+    filled = [GEOS.Polygon(GEOS.exteriorRing(poly)) for poly in polygons(all)]
+    solid = length(filled) == 1 ? only(filled) : GEOS.unaryUnion(GEOS.MultiPolygon(filled))
+    # Work on the global void, not each disconnected bead ring separately: filling
+    # sparse infill must not overwrite a real bore bounded by another bead ring.
+    void = GEOS.difference(solid, all)
+    holes = GEOS.intersection(void, outer_wall_holes(loops;exterior=solid,
+        margin=maximum(p.w for p in paths)/2))
+    return GEOS.difference(solid, holes)
+end
+
+"Closed outer-perimeter centerlines, including the slicer's short seam gap."
+function outer_wall_loops(paths)
+    walls = [p for p in paths if p.outer]
+    isempty(walls) && return GEOS.Polygon[]
+    lines = GEOS.lineMerge(GEOS.MultiLineString([GEOS.LineString([[q[1], q[2]] for q in p.points]) for p in walls]))
+    chains = lines isa GEOS.LineString ? [lines] : [GEOS.getGeometry(lines, i) for i in 1:GEOS.numGeometries(lines)]
+    loops = GEOS.Polygon[]
+    seam = maximum(p.w for p in walls) / 2
+    for line in chains
+        points = Vec2d[Vec2d(q...) for q in GEOS.GeoInterface.coordinates(line)]
+        length(points) >= 3 && norm(first(points) - last(points)) <= seam || continue
+        polygon = GEOS.Polygon(GEOS.LinearRing(polygon_coords(points)))
+        GEOS.isValid(polygon) && GEOS.area(polygon) > 0 && push!(loops, polygon)
     end
-    return length(filled) == 1 ? only(filled) : GEOS.unaryUnion(GEOS.MultiPolygon(filled))
+    return loops
+end
+
+"Hole domains from nested perimeter loops; material islands inside holes stay material."
+function outer_wall_holes(loops;exterior=nothing,margin=0.0)
+    depths=[count(other->GEOS.covers(other,loop),loops) for loop in loops]
+    # Bambu may emit an exterior overhang as Bridge rather than Outer wall.
+    # A closed bore wall then has no tagged exterior ancestor. The deposited
+    # union's exterior still supplies that ancestor: a root strictly farther
+    # from that boundary than any bead's half-width cannot be its perimeter.
+    # Restore the missing nesting level for that root and its material islands.
+    interior_roots=exterior===nothing ? eltype(loops)[] :
+        [loop for (loop,depth) in zip(loops,depths) if depth==1 &&
+            GEOS.covers(exterior,loop) &&
+            GEOS.distance(GEOS.boundary(loop),GEOS.boundary(exterior))>margin+1e-8]
+    holes = GEOS.readgeom("POLYGON EMPTY")
+    for loop in sort(loops; by = GEOS.area, rev = true)
+        depth = count(other -> GEOS.covers(other, loop), loops)
+        depth += count(root->GEOS.covers(root,loop),interior_roots)
+        if iseven(depth)
+            holes = GEOS.union(holes, loop)
+        elseif depth > 1
+            holes = GEOS.difference(holes, loop)
+        end
+    end
+    return holes
 end
 
 "The polygons of a (multi)polygon."
@@ -205,8 +266,15 @@ function PrintedPart(o::PrintObject, p::Placement, paths::Vector{BeadPath}; shri
     for z in zs
         here = filter(q -> q.z == z, paths)
         region = layer_region(here)
-        h = maximum(q -> q.h, here)
-        push!(layers, PrintedLayer(z - h, z, region, GEOS.prepareGeom(region)))
+        # Combined infill can be extruded 0.4 mm high inside a 0.2 mm wall layer.
+        # It does not make the entire outer contour twice as thick. The boundary
+        # layer follows the walls; without any wall, retain the thinnest path height.
+        walls = filter(q -> q.outer, here)
+        h = isempty(walls) ? minimum(q -> q.h, here) : maximum(q -> q.h, walls)
+        # G-code heights are decimal. Reuse their precision after subtraction so
+        # adjacent 0.2 mm slabs share one plane exactly, rather than overlap by an
+        # ulp and leave zero-thickness Boolean facets at their interface.
+        push!(layers, PrintedLayer(round(z - h; digits = 8), round(z; digits = 8), region, GEOS.prepareGeom(region)))
     end
     return PrintedPart(o.item, layers, rotation, offset, c, shrink, swell)
 end

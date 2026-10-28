@@ -469,10 +469,10 @@ function camera_and_desk!(st::Studio, ax, s::AssemblyStep, placed; fov)
     return nothing
 end
 
-"Renders `fig` and writes it to `path` (JPEG): through the screen itself, since `save` does not hand `px_per_unit` on to RayMakie."
-function save_picture(st::Studio, path, fig)
+"Renders `fig` on the device `dev` and writes it to `path` (JPEG): through the screen itself, since `save` does not hand `px_per_unit` on to RayMakie."
+function save_picture(dev::Mantle.Device, st::Studio, path, fig)
     Makie.update_state_before_display!(fig)
-    screen = RayMakie.Screen(fig.scene; samples = st.samples)
+    screen = RayMakie.Screen(fig.scene; samples = st.samples, device = Mantle.backend(dev))
     img = colorbuffer(screen; figure = fig, px_per_unit = st.px_per_unit)
     close(screen)
     save(path, img)
@@ -501,14 +501,14 @@ function step_figure(st::Studio, k, s::AssemblyStep, scene; size, fov)
 end
 
 """
-    assembly_guide(st, dir, plan, shown; leads = Lead[], steps = all, size = (1400, 1050), fov = 32, markdown, title, intro)
+    assembly_guide(dev, st, dir, plan, shown; leads = Lead[], steps = all, size = (1400, 1050), fov = 32, markdown, title, intro)
 
-Renders one picture per step of `plan` (`AssemblyStep`s) into `dir` (`step_01.jpg`, …) from the
+Renders on the device `dev` one picture per step of `plan` (`AssemblyStep`s) into `dir` (`step_01.jpg`, …) from the
 parts `shown` (`Part`s), and writes the instructions with the steps and their pictures to
 `markdown` (`ASSEMBLY.md` next to `dir`). `steps` picks which pictures are rendered; the
 Markdown always lists all of them.
 """
-function assembly_guide(st::Studio, dir, plan::AbstractVector{AssemblyStep}, shown::AbstractVector{Part}; leads = Lead[], steps = nothing,
+function assembly_guide(dev::Mantle.Device, st::Studio, dir, plan::AbstractVector{AssemblyStep}, shown::AbstractVector{Part}; leads = Lead[], steps = nothing,
         size = (1400, 1050), fov = 32, markdown = joinpath(dirname(dir), "ASSEMBLY.md"), title = "Assembly", intro = "")
     mkpath(dir)
     done = Set{String}()
@@ -517,7 +517,7 @@ function assembly_guide(st::Studio, dir, plan::AbstractVector{AssemblyStep}, sho
         path = joinpath(dir, "step_$(lpad(k, 2, '0')).jpg")
         push!(images, path)
         if isnothing(steps) || k in steps
-            save_picture(st, path, step_figure(st, k, s, step_scene(s, shown, done, leads); size, fov))
+            save_picture(dev, st, path, step_figure(st, k, s, step_scene(s, shown, done, leads); size, fov))
         end
         s.kept && union!(done, step_items(s, shown))
     end

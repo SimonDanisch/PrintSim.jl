@@ -5,7 +5,7 @@
 
 One item of an assembly. `build(loaded)` adds its solids to the current Gmsh model in the
 assembled position; springs differ between `loaded` (as assembled) and unloaded (as printed).
-`material` is `:PLA`, `:PETG`, `:bought` or `:household`. `down` is the direction (assembly
+`material` is `:PLA`, `:PETG`, `:steel` (bought steel parts: shafts, bearings, fasteners), `:bought` or `:household`. `down` is the direction (assembly
 coordinates) that faces the print bed, `size` the mesh size (mm) for display, `settings` the
 slicer settings it needs (`"key" => "value"`), and `group` what it belongs to (exports and
 checks pick items by group).

@@ -25,6 +25,9 @@ at `axis`, or without one at the middle of the moving part's cut. `kind` says wh
 
 - `:turns`: `moving` turns about `axis` in `host` and must not touch it at any angle;
 - `:holds`: a clamp or press fit, `moving` must overlap `host` a little;
+- `:seats`: a bought ring (a bearing's outer ring, a steel post) in a printed seat: pressed in
+  lightly or sliding in with little play, `moving` overlapping `host` at most 0.15 mm deep or
+  clear of it by at most 0.1 mm;
 - `:slides`: `moving` goes into `host` and must not overlap it;
 - `:keyed`: `moving` slides onto the D-shaft `host` without overlapping it, and the flat drives
   it (`key_play`);
@@ -94,6 +97,11 @@ function check(j::Joint, printed::Dict{String, PrintedPart}; angles = 0:10:350)
         elseif j.kind == :holds
             o = overlap(a, h)
             worst = min(worst, o > 1.0e-4 ? o : -gap(a, h))
+        elseif j.kind == :seats
+            # How deep the ring presses into its seat (its overlap per mm of its outline), or the gap.
+            o = GEOS.intersection(a, h)
+            fit = GEOS.area(o) > 1.0e-4 ? GEOS.area(o) / GEOS.geomLength(GEOS.boundary(a)) : -gap(a, h)
+            worst = abs(fit) > abs(worst) || isinf(worst) ? fit : worst
         elseif j.kind in (:slides, :keyed, :seated)
             o = overlap(a, h)
             worst = min(worst, o > 1.0e-4 ? -o : gap(a, h))
@@ -114,13 +122,15 @@ end
 
 Every joint checked on the printed parts, with a verdict: turning parts need a gap at every
 angle, fits that hold need some overlap (clamps, press fits) but not more than printed parts
-give (0.3 mm² per mm of contact is a hard press), slides need a gap, pegs and feet need
-material around or under at least 80 % of them.
+give (0.3 mm² per mm of contact is a hard press), seats of bought rings between a 0.15 mm press
+and 0.1 mm of play (the worst plane), slides need a gap, pegs and feet need material around or
+under at least 80 % of them.
 """
 function joint_report(printed::Dict{String, PrintedPart}, joints::AbstractVector{Joint})
     map(joints) do j
         v = check(j, printed)
-        ok = j.kind == :turns ? v > 0.02 : j.kind == :holds ? v > 0 : j.kind in (:slides, :keyed, :seated) ? v >= 0 : v >= 0.8
+        ok = j.kind == :turns ? v > 0.02 : j.kind == :holds ? v > 0 : j.kind == :seats ? -0.1 <= v <= 0.15 :
+            j.kind in (:slides, :keyed, :seated) ? v >= 0 : v >= 0.8
         (joint = j.name, kind = j.kind, value = round(v; digits = 3), ok = ok)
     end
 end
