@@ -6,8 +6,8 @@ function atomic_extrema_fixture!(minimum,maximum,values)
     i=PS.KI.get_global_id(Int32).x
     i<=length(values) || return nothing
     @inbounds begin
-        PS.Atomix.@atomic min(minimum[1],values[i])
-        PS.Atomix.@atomic max(maximum[1],values[i])
+        PS.Atomix.@atomic :monotonic min(minimum[1],values[i])
+        PS.Atomix.@atomic :monotonic max(maximum[1],values[i])
     end
     return nothing
 end

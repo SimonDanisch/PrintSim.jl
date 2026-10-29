@@ -85,8 +85,12 @@ end
 @testset "outward projected trajectory certificates preserve exact stored positions" begin
     fixture=captured_projection_fixture()
     ids=Int32.((1,4,3,5))
-    old=PS.swept_primitive(fixture,ids,Val(true),0f0,true)
-    @test old.hit && old.time==0 && !old.resolved
+    # Pin the exact geometry, not a false positive from an older unfiltered
+    # solver. A fixed axis from the captured triangle edge separates the
+    # exact stored endpoints for the complete trajectory.
+    position(p)=PS.Vec3d(p.hi)+PS.Vec3d(p.lo)
+    edge=position(fixture.start[ids[4]])-position(fixture.start[ids[3]])
+    @test rational_projection_certificate(fixture,ids,Val(true),0f0,PS.Vec3d(0,edge[3],-edge[2]))
     @test PS.ccd_projected_separated(fixture,ids,Val(true),0f0,Val(true))
     @test !PS.ccd_projected_separated(fixture,ids,Val(true),0f0,Val(false))
     @test !PS.ccd_projected_separated(fixture,ids,Val(true),1f-4,Val(true))
@@ -101,11 +105,14 @@ end
     @test only(prefix_fixture.status)==UInt32(0)
     @test reinterpret(Float32,only(prefix_fixture.bound))==1f0
     positive=captured_projection_positive_fixture()
-    old_positive=PS.swept_primitive(positive,prefix_ids,Val(true),0f0,true)
-    @test old_positive.hit && 0<old_positive.time<1f-4 && !old_positive.resolved
-    @test PS.filtered_swept_accumulate!(positive,prefix_ids,Val(true),0f0,true)==1
-    @test reinterpret(Float32,only(positive.bound))==.9f0/128
-    @test reinterpret(Float32,only(positive.bound))>100*.9f0*old_positive.time
+    reference=PS.swept_primitive(positive,prefix_ids,Val(true),0f0,true)
+    @test reference.hit && reference.time>0 && reference.resolved
+    @test PS.filtered_swept_accumulate!(positive,prefix_ids,Val(true),0f0,true)==0
+    cap=reinterpret(Float32,only(positive.bound))
+    # Preserve at least the certified dyadic-prefix progress. The current
+    # solver can advance further; certify that returned step independently.
+    @test cap>=.9f0/128
+    @test rational_projection_certificate(positive,prefix_ids,Val(true),0f0,PS.Vec3d(1,0,0),Float64(cap))
     cases=projection_random_cases()
     certified=0
     for kind in (Val(true),Val(false)),case in eachindex(cases.axes),scale in (1.,.5,.125)

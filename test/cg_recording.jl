@@ -78,7 +78,7 @@ end
     measured.passcost .= 0
     ranges = Mantle.partitionranges(measured)
     parts = collect(eachindex(ranges))
-    batches, _ = Mantle.submissionbatches(measured, ranges, parts, fill(nothing, length(parts)))
+    batches = Mantle.submissionbatches(measured, ranges, parts)
     for (i, range) in enumerate(ranges)
         isempty(range) && continue
         loop = measured.passes[first(range)].pass.loop

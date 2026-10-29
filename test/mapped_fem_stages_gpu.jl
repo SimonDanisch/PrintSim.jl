@@ -24,7 +24,7 @@ function mapped_fem_stage_probe(backend,maps)
     model=PS.fem_contact_model(f.model,world.fem_contacts)
     PS.launch!(backend,PS.fem_contact_endpoints!,
         (index,model,a.colliders,a.contacts,s.touches,s.faces,Int32(0)),index.entries)
-    PS.compact!(backend,index)
+    PS.compact!(backend,world.fem_contacts)
     motion=PS.DeformingMeshes(PS.MovingMeshes(a.model,state.bodies,a.anchor,world.coupling),f.model,state.deformables,f.anchor)
     PS.launch!(backend,PS.body_contact_forces!,
         (a.contacts,a.colliders,a.model,state.bodies,a.anchor,a.one,a.roughness,a.tangential,false,motion),npoints)

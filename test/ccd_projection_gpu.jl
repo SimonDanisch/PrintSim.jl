@@ -101,10 +101,13 @@ end
     positive=captured_projection_positive_fixture()
     positive_scene=(;start=PS.upload(BACKEND,positive.start),finish=PS.upload(BACKEND,positive.finish),
         refinement=Val(true),bound=PS.upload(BACKEND,positive.bound),status=PS.upload(BACKEND,positive.status))
+    expected_flags=PS.filtered_swept_accumulate!(positive,Int32.((1,2,3,4)),Val(true),0f0,true)
     PS.launch!(BACKEND,projection_prefix_kernel!,(flag,positive_scene,Val(true)),1;group=64)
-    @test only(Array(flag))==1
-    @test only(Array(positive_scene.status))==1
-    @test reinterpret(Float32,only(Array(positive_scene.bound)))==.9f0/128
+    @test only(Array(flag))==expected_flags
+    @test only(Array(positive_scene.status))==only(positive.status)
+    @test only(Array(positive_scene.bound))==only(positive.bound)
+    cap=reinterpret(Float32,only(Array(positive_scene.bound)))
+    @test rational_projection_certificate(positive,Int32.((1,2,3,4)),Val(true),0f0,PS.Vec3d(1,0,0),Float64(cap))
     b=ModelBuilder()
     for z in (0.,.01)
         add_sheet!(b,SheetGrid(.01,.01,2,2),SheetMaterial();place=p->PS.Vec3d(p[1],p[2],z))
