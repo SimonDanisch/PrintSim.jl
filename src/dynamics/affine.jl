@@ -666,7 +666,7 @@ struct BodySolver{B, M, C, T, P, V, H, G, D, F, J, R, MM, MS, U}
     iterations::Int
 end
 
-function BodySolver(backend, b::ModelBuilder; roughness = 1e-6, tangential = 0.5, newton = 8, iterations = 24, allow_empty = false)
+function BodySolver(backend, b::ModelBuilder; roughness = 1e-6, tangential = 0.5, newton = 16, iterations = 24, allow_empty = false)
     isempty(b.bodies) && !allow_empty && throw(ArgumentError("BodySolver needs at least one affine body"))
     n = max(4length(b.bodies), 1)
     energy_count = max(length(b.bodies) + SLOTS * sum(length(m.vertices) for m in b.meshes; init = 0), 1)

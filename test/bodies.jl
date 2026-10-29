@@ -90,7 +90,7 @@ end
     @test maximum(abs(l-1) for l in load[40:end])<0.002
     # Four Newton iterations previously left a 30% acceleration error and a
     # spurious normal load. Require refinement agreement, not just finiteness.
-    refined, _, _, _, _ = body_on_slope(BACKEND; θdeg = 35.0,newton=16)
+    refined, _, _, _, _ = body_on_slope(BACKEND; θdeg = 35.0,newton=32)
     refined_rate=((refined[80]-refined[79])-(refined[60]-refined[59]))/20e-6
     @test isapprox(rate,refined_rate;rtol=2e-5)
 end

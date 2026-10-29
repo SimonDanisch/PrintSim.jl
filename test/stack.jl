@@ -47,11 +47,12 @@ end
     backend = BACKEND
     _, loads = two_on_slope(backend)
     @test all(l -> isapprox(l[1], 2; rtol = 0.005) && isapprox(l[2], 1; rtol = 0.005), loads[5:end])
-    # Both come to rest on 20°. The lower sheet's friction springs give way by 2σ tan θ. Set
-    # down on the slope at once, the upper sheet's swing past that and past μs: it slides a few
-    # microns until kinetic friction (μk = 0.38 against tan θ = 0.36) stops it.
+    # Both come to rest on 20°. The lower sheet carries both weights, and its
+    # tangential spring is half the barrier curvature at that resting load.
     slides, _ = two_on_slope(backend; θdeg = 20.0, steps = 30)
-    give = 2 * 1.0e-6 * tan(deg2rad(20.0))
+    pressure = 2 * SheetMaterial().grammage * 9.81 * cos(deg2rad(20.0))
+    _, curvature = PS.normal_force(resting_gap(pressure), 2.0e10, 1.0e-6)
+    give = pressure * tan(deg2rad(20.0)) / (0.5 * curvature)
     @test isapprox(slides[end][1], give; rtol = 0.05)
     @test slides[end][2] < 10give
     @test all(k -> abs(slides[end][k] - slides[end - 10][k]) < 1.0e-10, 1:2)
@@ -99,9 +100,8 @@ function deep_stack(backend; sheets = 6, θdeg = 20.0, steps = 40, n = 17, size 
 end
 
 @testset "a stack of six" begin
-    # Each sheet carries the ones above it, and the stack comes to rest: its contacts give way
-    # by 2σ tan θ each, some slide a few microns more (as two sheets do), 20 µm at the top, and
-    # from step 25 on the vertices only jitter by tenths of a nanometer.
+    # Each sheet carries the ones above it, and the stack comes to rest within
+    # the original 22 µm settling bound, with less than 2 nm of late motion.
     move, creep, loads, lost = deep_stack(BACKEND)
     @test move < 6 * 10 * 1.0e-6 * tan(deg2rad(20.0))
     @test creep < 2.0e-9

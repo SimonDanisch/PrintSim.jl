@@ -39,6 +39,29 @@ function forward!(x, v, acceleration, anchor, inertia, fixed, one, g::Vec3f, dt:
     return nothing
 end
 
+"Start sticking contacts from their accepted positions, preserving the friction spring's branch."
+function sticking_prediction!(x, anchor, T, P, F, model)
+    i = KI.get_global_id(Int32).x
+    i <= length(x) || return nothing
+    @inbounds begin
+        sticking = false
+        for k in 1:SLOTS
+            sticking |= T.lagged[k, i] > 0 && T.sliding[k, i] == 0x00
+        end
+        for k in 1:2
+            sticking |= P.lagged[k, i] > 0 && P.sliding[k, i] == 0x00
+        end
+        for e in model.vtri_start[i]:(model.vtri_start[i + 1] - Int32(1))
+            t = model.vtri[e]
+            for k in 1:FACE_SLOTS
+                sticking |= F.lagged[k, t] > 0 && F.sliding[k, t] == 0x00
+            end
+        end
+        sticking && (x[i] = anchor[i])
+    end
+    return nothing
+end
+
 "Each spring at the current positions: its force on its first vertex and its stiffness block."
 function linearize_springs!(force, block, x, anchor, m, dt::Float32)
     e = KI.get_global_id(Int32).x
@@ -265,7 +288,7 @@ struct SheetSolver{B, M, X, A, L, G, E, S, C, T, FT, PA}
 end
 
 function SheetSolver(backend, b::ModelBuilder; thickness = 1.0e-4, roughness = 1.0e-6, tangential = 0.5,
-        newton = 2, iterations = 12, smooth = 2, colliders = nothing)
+        newton = 8, iterations = 12, smooth = 2, colliders = nothing)
     model = Model(backend, b)
     n = length(b.x)
     z(T, k) = KI.zeros(backend, T, max(k, 1))
@@ -329,6 +352,10 @@ function step!(target, s::SheetSolver, state::State, dt)
     r, z = fine.r, fine.z
     groups = cld(n, 256) * 256
     predict_sheet!(target, s, state, dt)
+    # Extrapolating a nanometer-scale equilibrium spring can leave the static
+    # cone before Newton even starts. Keep inertia's full ballistic target,
+    # while choosing an initial iterate on the accepted sticking branch.
+    launch!(target, sticking_prediction!, (state.x, s.anchor, s.touches, s.partners, s.faces, m), n)
     for _ in 1:s.newton
         linearize_sheet!(target, s, state, dt)
         launch!(target, zero!, (s.scalars,), length(s.scalars))
