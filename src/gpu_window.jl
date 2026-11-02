@@ -58,7 +58,7 @@ function with_gpu_window(f;seconds=900,lock_path="/tmp/bosgame-gpu.lock",host_me
         watchdog=gpu_window_watchdog(getpid(),seconds)
         device=existing_device===nothing ?
             (device_selector===nothing ? Mantle.Device() : Mantle.Device(device_selector)) : existing_device
-        return f(device,Mantle.backend(device))
+        return f(device,device)
     catch err
         failed=true
         device===nothing || @error "GPU window failed before final synchronization" exception=(err,catch_backtrace())

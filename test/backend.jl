@@ -3,4 +3,4 @@
 import Mantle
 
 const TEST_DEVICE = Mantle.Device()
-const BACKEND = Mantle.backend(TEST_DEVICE)
+const BACKEND = TEST_DEVICE

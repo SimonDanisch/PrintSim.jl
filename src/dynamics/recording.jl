@@ -347,7 +347,7 @@ function player(rec::Union{Recording,MappedRecording}; color = :material, series
     slider = Slider(fig[2, 1]; range = 1:length(rec.frames), startvalue = 1)
     index = frame_index === nothing ? slider.value : frame_index
     frame = Makie.lift(i -> rec.frames[i], index)
-    render_backend=device isa Mantle.Device ? Mantle.backend(device) : device
+    render_backend=device
     surface=render_backend isa KI.Backend ? RecordingSurface(render_backend,rec,frame[]) : nothing
     geometry = Makie.lift(frame) do f
         surface===nothing ? GeometryBasics.Mesh(frame_surface(rec,f),rec.faces) :
@@ -392,7 +392,7 @@ function save_video(path, rec::Union{Recording,MappedRecording}; framerate = 30,
     figure = player(rec; frame_index = index, series = String[], camera,device)
     times = recording_times(rec)
     count = max(2, ceil(Int, (last(times) - first(times)) * framerate / speed) + 1)
-    render_device=device isa Mantle.Device ? Mantle.backend(device) : device
+    render_device=device
     Makie.record(figure, path, 0:(count - 1); framerate,backend=RayMakie,rasterize,device=render_device,visible=false) do frame
         time = min(first(times) + frame * speed / framerate, last(times))
         selected=clamp(searchsortedlast(times,time),1,length(times))

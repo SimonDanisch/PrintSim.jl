@@ -472,7 +472,7 @@ end
 "Renders `fig` on the device `dev` and writes it to `path` (JPEG): through the screen itself, since `save` does not hand `px_per_unit` on to RayMakie."
 function save_picture(dev::Mantle.Device, st::Studio, path, fig)
     Makie.update_state_before_display!(fig)
-    screen = RayMakie.Screen(fig.scene; samples = st.samples, device = Mantle.backend(dev))
+    screen = RayMakie.Screen(fig.scene; samples = st.samples, device = dev)
     img = colorbuffer(screen; figure = fig, px_per_unit = st.px_per_unit)
     close(screen)
     save(path, img)
